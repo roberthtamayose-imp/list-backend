@@ -1,0 +1,79 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  password  String
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  ownedLists  ShoppingList[] @relation("ListOwner")
+  sharedLists ListShare[]
+
+  @@map("users")
+}
+
+model ShoppingList {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  shareCode   String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  ownerId    String
+  owner      User           @relation("ListOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  items      ShoppingItem[]
+  sharedWith ListShare[]
+
+  @@map("shopping_lists")
+}
+
+model ShoppingItem {
+  id        String   @id @default(uuid())
+  name      String
+  quantity  Float    @default(1)
+  unit      String   @default("un")
+  category  String   @default("outros")
+  completed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  listId String
+  list   ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@map("shopping_items")
+}
+
+model ListShare {
+  id      String  @id @default(uuid())
+  canEdit Boolean @default(true)
+
+  // Relations
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  listId String
+  list   ShoppingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, listId])
+  @@map("list_shares")
+}
+
