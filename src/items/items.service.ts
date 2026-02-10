@@ -13,7 +13,7 @@ export class ItemsService {
   constructor(
     private prisma: PrismaService,
     private listsService: ListsService,
-  ) {}
+  ) { }
 
   private async checkEditPermission(listId: string, userId: string) {
     const list = await this.listsService.findOne(listId, userId);
@@ -34,11 +34,38 @@ export class ItemsService {
   async create(listId: string, createItemDto: CreateItemDto, userId: string) {
     await this.checkEditPermission(listId, userId);
 
+    let itemData: any = { ...createItemDto, listId };
+
+    // If registeredItemId is provided, use registered item defaults
+    if (createItemDto.registeredItemId) {
+      const registeredItem = await this.prisma.registeredItem.findUnique({
+        where: { id: createItemDto.registeredItemId },
+      });
+
+      if (registeredItem) {
+        const { registeredItemId, ...dtoFields } = createItemDto;
+        // Remove undefined fields so they don't override defaults
+        const overrides: any = {};
+        if (dtoFields.name !== undefined) overrides.name = dtoFields.name;
+        if (dtoFields.quantity !== undefined) overrides.quantity = dtoFields.quantity;
+        if (dtoFields.unit !== undefined) overrides.unit = dtoFields.unit;
+        if (dtoFields.category !== undefined) overrides.category = dtoFields.category;
+        if (dtoFields.completed !== undefined) overrides.completed = dtoFields.completed;
+
+        itemData = {
+          name: registeredItem.name,
+          quantity: registeredItem.defaultQuantity,
+          unit: registeredItem.defaultUnit,
+          category: registeredItem.category,
+          ...overrides,
+          registeredItemId,
+          listId,
+        };
+      }
+    }
+
     const item = await this.prisma.shoppingItem.create({
-      data: {
-        ...createItemDto,
-        listId,
-      },
+      data: itemData,
     });
 
     // Update list timestamp

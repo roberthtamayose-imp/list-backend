@@ -3,6 +3,7 @@ import {
   IsNumber,
   IsOptional,
   IsBoolean,
+  IsUUID,
   Min,
   IsIn,
 } from 'class-validator';
@@ -43,5 +44,9 @@ export class CreateItemDto {
   @IsBoolean()
   @IsOptional()
   completed?: boolean;
+
+  @IsUUID()
+  @IsOptional()
+  registeredItemId?: string;
 }
 
