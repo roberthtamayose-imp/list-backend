@@ -23,6 +23,7 @@ model User {
   ownedLists      ShoppingList[]   @relation("ListOwner")
   sharedLists     ListShare[]
   registeredItems RegisteredItem[]
+  passwordResets  PasswordReset[]
 
   @@map("users")
 }
@@ -98,5 +99,19 @@ model RegisteredItem {
 
   @@unique([userId, name])
   @@map("registered_items")
+}
+
+model PasswordReset {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  // Relations
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_resets")
 }
 

@@ -79,5 +79,20 @@ export class UsersService {
       where: { id },
     });
   }
+
+  async updatePassword(id: string, hashedPassword: string) {
+    await this.findById(id);
+
+    return this.prisma.user.update({
+      where: { id },
+      data: { password: hashedPassword },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        image: true,
+      },
+    });
+  }
 }
 

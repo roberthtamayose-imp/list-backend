@@ -1,15 +1,27 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
   constructor(
     private usersService: UsersService,
     private jwtService: JwtService,
+    private prisma: PrismaService,
+    private mailService: MailService,
   ) {}
 
   async validateUser(email: string, password: string) {
@@ -74,6 +86,95 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Token inválido');
     }
+  }
+
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    const user = await this.usersService.findByEmail(forgotPasswordDto.email);
+
+    if (!user) {
+      return {
+        message:
+          'Se o email existir em nossa base, você receberá instruções para redefinir sua senha.',
+      };
+    }
+
+    await this.prisma.passwordReset.updateMany({
+      where: {
+        userId: user.id,
+        used: false,
+        expiresAt: { gt: new Date() },
+      },
+      data: { used: true },
+    });
+
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await this.prisma.passwordReset.create({
+      data: {
+        token: resetToken,
+        userId: user.id,
+        expiresAt,
+      },
+    });
+
+    await this.mailService.sendPasswordResetEmail(
+      user.email,
+      user.name || '',
+      resetToken,
+    );
+
+    return {
+      message:
+        'Se o email existir em nossa base, você receberá instruções para redefinir sua senha.',
+    };
+  }
+
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    const passwordReset = await this.prisma.passwordReset.findUnique({
+      where: { token: resetPasswordDto.token },
+      include: { user: true },
+    });
+
+    if (!passwordReset) {
+      throw new BadRequestException('Token inválido ou expirado');
+    }
+
+    if (passwordReset.used) {
+      throw new BadRequestException('Este token já foi utilizado');
+    }
+
+    if (passwordReset.expiresAt < new Date()) {
+      throw new BadRequestException('Token expirado');
+    }
+
+    const hashedPassword = await bcrypt.hash(resetPasswordDto.newPassword, 10);
+
+    await this.usersService.updatePassword(
+      passwordReset.userId,
+      hashedPassword,
+    );
+
+    await this.prisma.passwordReset.update({
+      where: { id: passwordReset.id },
+      data: { used: true },
+    });
+
+    return {
+      message: 'Senha alterada com sucesso',
+    };
+  }
+
+  async validateResetToken(token: string) {
+    const passwordReset = await this.prisma.passwordReset.findUnique({
+      where: { token },
+    });
+
+    if (!passwordReset || passwordReset.used || passwordReset.expiresAt < new Date()) {
+      throw new NotFoundException('Token inválido ou expirado');
+    }
+
+    return { valid: true };
   }
 }
 
